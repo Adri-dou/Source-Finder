@@ -21,7 +21,7 @@ robot = rob.Robot(x0, y0, theta0)
 
 
 # potential
-pot = Potential.Potential(difficulty=1, random=False)
+pot = Potential.Potential(difficulty=1, random=True)
 
 
 # position control loop: gain and timer
@@ -37,9 +37,9 @@ timerOrientationCtrl = tmr.Timer(orientationCtrlPeriod)
 
 
 # list of way points list of [x coord, y coord]
-WPlist = [ [x0,y0], [0, 0], [10,10], [-10,10], [-10,-10], [10,-10], [0,0] ]
+WPlist = [ [x0,y0], [0, 0], [5,0], [-10,10], [-10,-10], [10,-10], [0,0] ]
 #threshold for change to next WP
-epsilonWP = 0.2
+epsilonWP = 1.0
 # init WPManager
 WPManager = rob.WPManager(WPlist, epsilonWP)
 
@@ -71,15 +71,16 @@ for t in simu.t:
 
     # position control loop
     if timerPositionCtrl.isEllapsed(t):
+
         # Calculate distance to current waypoint
         distance = WPManager.distanceToCurrentWP(robot.x, robot.y)
         
         # Calculate desired linear velocity (proportional control)
-        Kv = 1  # gain for linear velocity control
+        Kv = 2  # gain for linear velocity control
         Vr = Kv * distance
         
         # Limit maximum velocity if needed
-        Vmax = 2.0  # maximum velocity in m/s
+        Vmax = 6.0  # maximum velocity in m/s
         if Vr > Vmax:
             Vr = Vmax
 
@@ -92,7 +93,7 @@ for t in simu.t:
     # orientation control loop
     if timerOrientationCtrl.isEllapsed(t):
         # angular velocity control input
-        Kw = 2 # gain for angular velocity control
+        Kw = 2.5 # gain for angular velocity control
         orientation_error = thetar - robot.theta
         omegar = Kw * orientation_error
     
