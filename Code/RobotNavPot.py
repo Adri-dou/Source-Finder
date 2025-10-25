@@ -30,7 +30,7 @@ positionCtrlPeriod = 0.2#0.01
 timerPositionCtrl = tmr.Timer(positionCtrlPeriod)
 
 # orientation control loop: gain and timer
-kpOrient = 2.5
+kpOrient = 4
 orientationCtrlPeriod = 0.02#0.01
 timerOrientationCtrl = tmr.Timer(orientationCtrlPeriod)
 
@@ -44,14 +44,14 @@ for i in range(9):
 WPlist.append([0, 0])
 
 #threshold for change to next WP
-epsilonWP = 1.0
+epsilonWP = 0.2
 # init WPManager
 WPManager = rob.WPManager(WPlist, epsilonWP)
 
 
 # duration of scenario and time step for numerical integration
 t0 = 0.0
-tf = 35.0
+tf = 500.0
 dt = 0.01
 simu = rob.RobotSimulation(robot, t0, tf, dt)
 
@@ -69,14 +69,20 @@ def getSourceDirection():
 
 possibleStates = ["gotocenter",
                    "circle_sampling",
-                   "gotosource"]
+                   "gotosource",
+                   "outlining_source"]
 
 currentState = "gotocenter"
 
+# storage for sampled potentials
+# key: potential value //10, value: list of positions [x,y]
 sampleStorage = {}
 
 # arbitrary pollution threshold for source approach
 pollutionThreshold = 290
+
+# variable to check if robot is getting closer to the source
+oldPot = 0.0
 
 # initialize control inputs
 Vr = 0.0
@@ -85,6 +91,18 @@ omegar = 0.0
 
 # loop on simulation time
 for t in simu.t: 
+
+
+    # check if pollution threshold is reached to stop near source
+    if pot.value([robot.x, robot.y]) >= pollutionThreshold and currentState != "outlining_source":
+        currentState = "outlining_source"
+        WPManager.WPList = []  # clear WP list to outline source
+        WPManager.currentWP = None
+        WPManager.xr = robot.x
+        WPManager.yr = robot.y
+        #print("Source atteinte, contournement de la source")
+        
+        
 
     # storing samples when in circle_sampling state
     if currentState == "circle_sampling":
@@ -98,9 +116,6 @@ for t in simu.t:
         # print(f"Sampled at position {roundedCoordinates} with potential {roundedPotential}")
 
 
-    if currentState=="gotosource":
-        # Robot is moving towards the source
-        pass
 
     # WP navigation: switching condition to next WP of the list
     if (WPManager.distanceToCurrentWP(robot.x, robot.y) < epsilonWP):
@@ -116,6 +131,24 @@ for t in simu.t:
 
                 print("Robot terminé le sampling, direction la source !")
         
+        # outlining the source
+        if currentState == "outlining_source":
+            angle = math.pi/4
+
+            if pot.value([robot.x, robot.y]) <  < pollutionThreshold:
+                nextX = robot.x + 3 * math.cos(robot.theta + angle)
+                nextY = robot.y + 3 * math.sin(robot.theta + angle)
+
+            elif pot.value([robot.x, robot.y]) > pollutionThreshold:
+                nextX = robot.x + 3 * math.cos(robot.theta - angle)
+                nextY = robot.y + 3 * math.sin(robot.theta - angle)
+            else:
+                nextX = robot.x + 3 * math.cos(robot.theta)
+                nextY = robot.y + 3 * math.sin(robot.theta)
+
+            WPManager.WPList.append([nextX, nextY])
+
+
         WPManager.switchToNextWP()
 
 
@@ -143,7 +176,7 @@ for t in simu.t:
     # orientation control loop
     if timerOrientationCtrl.isEllapsed(t):
         # angular velocity control input
-        Kw = 2.5 # gain for angular velocity control
+        Kw = 4 # gain for angular velocity control
         orientation_error = thetar - robot.theta
         omegar = Kw * orientation_error
     
@@ -223,8 +256,8 @@ def animate(i):
     robotBody.set_data([simu.x[i]], [simu.y[i]])          
     wayPoint.set_data([simu.xr[i]], [simu.yr[i]])
     WPArea.set_data([simu.xr[i]+xWPArea.transpose()], [simu.yr[i]+yWPArea.transpose()])    
-    thisx = [simu.x[i], simu.x[i] + 0.5*math.cos(simu.theta[i])]
-    thisy = [simu.y[i], simu.y[i] + 0.5*math.sin(simu.theta[i])]
+    thisx = [simu.x[i], simu.x[i] + 1*math.cos(simu.theta[i])]
+    thisy = [simu.y[i], simu.y[i] + 1*math.sin(simu.theta[i])]
     robotDirection.set_data(thisx, thisy)
     time_text.set_text(time_template%(i*simu.dt))
     potential_text.set_text(potential_template%(pot.value([simu.x[i],simu.y[i]])))
