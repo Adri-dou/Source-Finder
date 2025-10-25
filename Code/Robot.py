@@ -172,7 +172,7 @@ class RobotSimulation:
     def plotXY(self, figNo = 1, xmin=-25, xmax=25, ymin=-25, ymax=25):
         fig = plt.figure(figNo)
         ax = fig.add_subplot(111, aspect='equal', autoscale_on=False, xlim=(xmin, xmax), ylim=(ymin, ymax))
-        ax.plot(self.x, self.y, color = 'r')
+        ax.plot(self.x, self.y, color = 'fuchsia')
         ax.grid(True)
         ax.set_ylabel('y (m)')
         ax.set_xlabel('x (m)')

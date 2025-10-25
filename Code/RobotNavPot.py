@@ -21,7 +21,7 @@ robot = rob.Robot(x0, y0, theta0)
 
 
 # potential
-pot = Potential.Potential(difficulty=1, random=True)
+pot = Potential.Potential(difficulty=1, random=False)
 
 
 # position control loop: gain and timer
@@ -31,13 +31,18 @@ timerPositionCtrl = tmr.Timer(positionCtrlPeriod)
 
 # orientation control loop: gain and timer
 kpOrient = 2.5
-orientationCtrlPeriod = 0.05#0.01
+orientationCtrlPeriod = 0.02#0.01
 timerOrientationCtrl = tmr.Timer(orientationCtrlPeriod)
 
 
-
 # list of way points list of [x coord, y coord]
-WPlist = [ [x0,y0], [0, 0], [5,0], [-10,10], [-10,-10], [10,-10], [0,0] ]
+WPlist = [ [x0,y0], [0, 0]]
+for i in range(9):
+    radius = 5.0
+    angle = -i * (2* math.pi/8)
+    WPlist.append([radius * math.cos(angle), radius * math.sin(angle)])
+WPlist.append([0, 0])
+
 #threshold for change to next WP
 epsilonWP = 1.0
 # init WPManager
@@ -46,26 +51,71 @@ WPManager = rob.WPManager(WPlist, epsilonWP)
 
 # duration of scenario and time step for numerical integration
 t0 = 0.0
-tf = 200.0
+tf = 35.0
 dt = 0.01
 simu = rob.RobotSimulation(robot, t0, tf, dt)
 
+
+def getSourceDirection():
+    range = 4
+    maxPotential = max(sampleStorage.keys())
+    positions = sampleStorage[maxPotential]
+    avgX = sum([pos[0] for pos in positions]) / len(positions)
+    avgY = sum([pos[1] for pos in positions]) / len(positions)
+    return (range*avgX, range*avgY)
+
+#firstIter = True
+
+
+possibleStates = ["gotocenter",
+                   "circle_sampling",
+                   "gotosource"]
+
+currentState = "gotocenter"
+
+sampleStorage = {}
+
+# arbitrary pollution threshold for source approach
+pollutionThreshold = 290
 
 # initialize control inputs
 Vr = 0.0
 thetar = 0.0
 omegar = 0.0
 
-firstIter = True
-
-
-
 # loop on simulation time
 for t in simu.t: 
-   
-   
+
+    # storing samples when in circle_sampling state
+    if currentState == "circle_sampling":
+        roundedCoordinates = [round(robot.x), round(robot.y)]
+        roundedPotential = int(pot.value([robot.x, robot.y]) // 10)
+        if roundedPotential in sampleStorage:
+            if roundedCoordinates not in sampleStorage[roundedPotential]:
+                sampleStorage[roundedPotential].append(roundedCoordinates)
+        else:
+            sampleStorage[roundedPotential] = [roundedCoordinates]
+        # print(f"Sampled at position {roundedCoordinates} with potential {roundedPotential}")
+
+
+    if currentState=="gotosource":
+        # Robot is moving towards the source
+        pass
+
     # WP navigation: switching condition to next WP of the list
-    if (not WPManager.isWPListEmpty()) and (WPManager.distanceToCurrentWP(robot.x, robot.y) < epsilonWP):
+    if (WPManager.distanceToCurrentWP(robot.x, robot.y) < epsilonWP):
+
+        if WPManager.xr==0.0 and WPManager.yr==0.0:
+            if currentState=="gotocenter":
+                currentState="circle_sampling"
+                print("Robot arrivé au centre, début du cercle de sampling")
+            
+            elif currentState=="circle_sampling":
+                currentState="gotosource"
+                WPManager.WPList.append(getSourceDirection())
+
+                print("Robot terminé le sampling, direction la source !")
+        
         WPManager.switchToNextWP()
 
 
@@ -76,11 +126,11 @@ for t in simu.t:
         distance = WPManager.distanceToCurrentWP(robot.x, robot.y)
         
         # Calculate desired linear velocity (proportional control)
-        Kv = 2  # gain for linear velocity control
+        Kv = 1  # gain for linear velocity control
         Vr = Kv * distance
         
         # Limit maximum velocity if needed
-        Vmax = 6.0  # maximum velocity in m/s
+        Vmax = 4.0  # maximum velocity in m/s
         if Vr > Vmax:
             Vr = Vmax
 
@@ -107,9 +157,11 @@ for t in simu.t:
 
     # store data to be plotted   
     simu.addData(robot, WPManager, Vr, thetar, omegar, pot.value([robot.x,robot.y]))
-    
-    
 # end of loop on simulation time
+
+# print(sampleStorage)
+
+
 
 
 # close all figures
@@ -130,7 +182,7 @@ simu.plotPotential3D(5)
 
 
 # show plots
-
+# plt.show()
 
 
 
@@ -144,7 +196,7 @@ ax.set_xlabel('x (m)')
 ax.set_ylabel('y (m)')
 
 robotBody, = ax.plot([], [], 'o-', lw=2)
-robotDirection, = ax.plot([], [], '-', lw=1, color='k')
+robotDirection, = ax.plot([], [], '-', lw=2, color='k')
 wayPoint, = ax.plot([], [], 'o-', lw=2, color='b')
 time_template = 'time = %.1fs'
 time_text = ax.text(0.05, 0.9, '', transform=ax.transAxes)
@@ -161,7 +213,7 @@ def initAnimation():
     robotBody.set_data([], [])
     wayPoint.set_data([], [])
     WPArea.set_data([], [])
-    robotBody.set_color('r')
+    robotBody.set_color('g')
     robotBody.set_markersize(10)    
     time_text.set_text('')
     potential_text.set_text('')
@@ -178,10 +230,13 @@ def animate(i):
     potential_text.set_text(potential_template%(pot.value([simu.x[i],simu.y[i]])))
     return robotBody,robotDirection, wayPoint, time_text, potential_text, WPArea
 
-ani = animation.FuncAnimation(fig, animate, np.arange(1, len(simu.t)),
-    interval=4, blit=True, init_func=initAnimation, repeat=False)
+ani = animation.FuncAnimation(fig, animate, np.arange(1, len(simu.t), 5),
+    interval=25, blit=True, init_func=initAnimation, repeat=False)
 #interval=25
 
 #ani.save('robot.mp4', fps=15)
 
 plt.show()
+
+# Save GIF
+# ani.save('SourceFinder.gif', writer='pillow', fps=20, dpi=80)

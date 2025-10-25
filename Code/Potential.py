@@ -40,7 +40,7 @@ class Potential:
             self.mu2 = [ xwidth*np.random.rand()-xwidth/2. , ywidth*np.random.rand()-ywidth/2. ]
             self.mu3 = [ xwidth*np.random.rand()-xwidth/2. , ywidth*np.random.rand()-ywidth/2. ]
         else:
-            self.mu1 = [6, 4]
+            self.mu1 = [-17, 14]
             self.mu2 = [-2, -2]
             self.mu3 = [-7, 10]
         

@@ -203,13 +203,12 @@ simu.plotPotential3D(5)
 
 
 # show plots
-plt.show()
+#plt.show()
 
 
 # Animation *********************************
-fig = plt.figure()
-ax = fig.add_subplot(111, aspect='equal', autoscale_on=False,
-                     xlim=(-25, 25), ylim=(-25, 25))
+fig = plt.figure(1)
+#ax = fig.add_subplot(111, aspect='equal', autoscale_on=False, xlim=(-25, 25), ylim=(-25, 25))
 ax.grid()
 ax.set_xlabel('x (m)')
 ax.set_ylabel('y (m)')
@@ -228,34 +227,36 @@ xWPArea = WPManager.epsilonWP*np.cos(thetaWPArea)
 yWPArea = WPManager.epsilonWP*np.sin(thetaWPArea)
 
 
-# def initAnimation():
-#     robotDirection.set_data([], [])
-#     robotBody.set_data([], [])
-#     wayPoint.set_data([], [])
-#     WPArea.set_data([], [])
-#     robotBody.set_color('r')
-#     robotBody.set_markersize(20)
-#     time_text.set_text('')
-#     potential_text.set_text('')
-#     return robotBody, robotDirection, wayPoint, time_text, potential_text, WPArea
+def initAnimation():
+    robotDirection.set_data([], [])
+    robotBody.set_data([], [])
+    wayPoint.set_data([], [])
+    WPArea.set_data([], [])
+    robotBody.set_color('r')
+    robotBody.set_markersize(20)
+    time_text.set_text('')
+    potential_text.set_text('')
+    return robotBody, robotDirection, wayPoint, time_text, potential_text, WPArea
 
 
-# def animate(i):
-#     robotBody.set_data(simu.x[i], simu.y[i])
-#     wayPoint.set_data(simu.xr[i], simu.yr[i])
-#     WPArea.set_data(simu.xr[i]+xWPArea.transpose(),
-#                     simu.yr[i]+yWPArea.transpose())
-#     thisx = [simu.x[i], simu.x[i] + 0.5*math.cos(simu.theta[i])]
-#     thisy = [simu.y[i], simu.y[i] + 0.5*math.sin(simu.theta[i])]
-#     robotDirection.set_data(thisx, thisy)
-#     time_text.set_text(time_template % (i*simu.dt))
-#     potential_text.set_text(potential_template %
-#                             (pot.value([simu.x[i], simu.y[i]])))
-#     return robotBody, robotDirection, wayPoint, time_text, potential_text, WPArea
+def animate(i):
+    robotBody.set_data([simu.x[i]], [simu.y[i]])
+    wayPoint.set_data([simu.xr[i]], [simu.yr[i]])
+    WPArea.set_data([simu.xr[i]+xWPArea.transpose()],
+                    [simu.yr[i]+yWPArea.transpose()])
+    thisx = [simu.x[i], simu.x[i] + 0.5*math.cos(simu.theta[i])]
+    thisy = [simu.y[i], simu.y[i] + 0.5*math.sin(simu.theta[i])]
+    robotDirection.set_data(thisx, thisy)
+    time_text.set_text(time_template % (i*simu.dt))
+    potential_text.set_text(potential_template %
+                            (pot.value([simu.x[i], simu.y[i]])))
+    return robotBody, robotDirection, wayPoint, time_text, potential_text, WPArea
 
 
-# ani = animation.FuncAnimation(fig, animate, np.arange(1, len(simu.t)),
-#                               interval=4, blit=True, init_func=initAnimation, repeat=False)
+ani = animation.FuncAnimation(fig, animate, np.arange(1, len(simu.t)),
+                              interval=4, blit=True, init_func=initAnimation, repeat=False)
 # interval=25
 
 # ani.save('robot.mp4', fps=15)
+
+plt.show()
