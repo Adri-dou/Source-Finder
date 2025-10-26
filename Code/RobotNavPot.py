@@ -21,7 +21,7 @@ robot = rob.Robot(x0, y0, theta0)
 
 
 # potential
-pot = Potential.Potential(difficulty=1, random=False)
+pot = Potential.Potential(difficulty=2, random=False)
 
 
 # position control loop: gain and timer
@@ -44,14 +44,14 @@ for i in range(9):
 WPlist.append([0, 0])
 
 #threshold for change to next WP
-epsilonWP = 0.2
+epsilonWP = 1
 # init WPManager
 WPManager = rob.WPManager(WPlist, epsilonWP)
 
 
 # duration of scenario and time step for numerical integration
 t0 = 0.0
-tf = 500.0
+tf = 200.0
 dt = 0.01
 simu = rob.RobotSimulation(robot, t0, tf, dt)
 
@@ -123,32 +123,33 @@ for t in simu.t:
         if WPManager.xr==0.0 and WPManager.yr==0.0:
             if currentState=="gotocenter":
                 currentState="circle_sampling"
-                print("Robot arrivé au centre, début du cercle de sampling")
+                print("Arrivé au centre, début du cercle de sampling")
             
             elif currentState=="circle_sampling":
                 currentState="gotosource"
                 WPManager.WPList.append(getSourceDirection())
 
-                print("Robot terminé le sampling, direction la source !")
+                print("Sampling terminé, direction la source !")
         
         # outlining the source
         if currentState == "outlining_source":
-            angle = math.pi/4
+            angle = math.pi/8
 
-            if pot.value([robot.x, robot.y]) <  < pollutionThreshold:
-                nextX = robot.x + 3 * math.cos(robot.theta + angle)
-                nextY = robot.y + 3 * math.sin(robot.theta + angle)
+            if pot.value([robot.x, robot.y]) < previousPot < pollutionThreshold:
+                nextX = robot.x + math.cos(robot.theta + angle)
+                nextY = robot.y + math.sin(robot.theta + angle)
 
-            elif pot.value([robot.x, robot.y]) > pollutionThreshold:
-                nextX = robot.x + 3 * math.cos(robot.theta - angle)
-                nextY = robot.y + 3 * math.sin(robot.theta - angle)
+            elif pot.value([robot.x, robot.y]) > previousPot > pollutionThreshold:
+                nextX = robot.x + math.cos(robot.theta - angle)
+                nextY = robot.y + math.sin(robot.theta - angle)
             else:
-                nextX = robot.x + 3 * math.cos(robot.theta)
-                nextY = robot.y + 3 * math.sin(robot.theta)
+                nextX = robot.x + math.cos(robot.theta)
+                nextY = robot.y + math.sin(robot.theta)
 
             WPManager.WPList.append([nextX, nextY])
 
 
+        previousPot = pot.value([robot.x, robot.y])
         WPManager.switchToNextWP()
 
 
