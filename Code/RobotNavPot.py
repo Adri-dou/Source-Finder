@@ -21,16 +21,17 @@ robot = rob.Robot(x0, y0, theta0)
 
 
 # potential
-pot = Potential.Potential(difficulty=2, random=False)
+pot = Potential.Potential(difficulty=3, random=True)
 
 
 # position control loop: gain and timer
-kpPos = 0.8
+kpPos = 1.0
+Vmax = 4.0  # maximum velocity in m/s
 positionCtrlPeriod = 0.2#0.01
 timerPositionCtrl = tmr.Timer(positionCtrlPeriod)
 
 # orientation control loop: gain and timer
-kpOrient = 4
+kpOrient = 2.5
 orientationCtrlPeriod = 0.02#0.01
 timerOrientationCtrl = tmr.Timer(orientationCtrlPeriod)
 
@@ -44,14 +45,14 @@ for i in range(9):
 WPlist.append([0, 0])
 
 #threshold for change to next WP
-epsilonWP = 1
+epsilonWP = 1.8
 # init WPManager
 WPManager = rob.WPManager(WPlist, epsilonWP)
 
 
 # duration of scenario and time step for numerical integration
 t0 = 0.0
-tf = 200.0
+tf = 500.0
 dt = 0.01
 simu = rob.RobotSimulation(robot, t0, tf, dt)
 
@@ -64,13 +65,38 @@ def getSourceDirection():
     avgY = sum([pos[1] for pos in positions]) / len(positions)
     return (range*avgX, range*avgY)
 
+def storingSamples():
+    roundedCoordinates = [round(robot.x), round(robot.y)]
+    roundedPotential = int(pot.value([robot.x, robot.y]) // 10)
+    if roundedPotential in sampleStorage:
+        if roundedCoordinates not in sampleStorage[roundedPotential]:
+            sampleStorage[roundedPotential].append(roundedCoordinates)
+    else:
+        sampleStorage[roundedPotential] = [roundedCoordinates]
+    # print(f"Echantillonnage en {roundedCoordinates} avec un potentiel de {roundedPotential}")
+
+def computeSourceCenter():
+    sumX = 0.0
+    sumY = 0.0
+    count = 0
+    for positions in sampleStorage.values():
+        for pos in positions:
+            sumX += pos[0]
+            sumY += pos[1]
+            count += 1
+    if count > 0:
+        return (sumX / count, sumY / count)
+    else:
+        return (0.0, 0.0)
+
 #firstIter = True
 
 
 possibleStates = ["gotocenter",
                    "circle_sampling",
                    "gotosource",
-                   "outlining_source"]
+                   "outlining_source",
+                   "returning_home"]
 
 currentState = "gotocenter"
 
@@ -82,7 +108,7 @@ sampleStorage = {}
 pollutionThreshold = 290
 
 # variable to check if robot is getting closer to the source
-oldPot = 0.0
+previousPot = 0.0
 
 # initialize control inputs
 Vr = 0.0
@@ -94,27 +120,21 @@ for t in simu.t:
 
 
     # check if pollution threshold is reached to stop near source
-    if pot.value([robot.x, robot.y]) >= pollutionThreshold and currentState != "outlining_source":
+    if pot.value([robot.x, robot.y]) >= pollutionThreshold-10 \
+            and currentState not in ["outlining_source", "returning_home"]:
         currentState = "outlining_source"
-        WPManager.WPList = []  # clear WP list to outline source
+        sampleStorage = {}
+        WPManager.WPList = []
         WPManager.currentWP = None
         WPManager.xr = robot.x
         WPManager.yr = robot.y
-        #print("Source atteinte, contournement de la source")
+        print("Source atteinte, contournement de la source")
         
         
 
     # storing samples when in circle_sampling state
     if currentState == "circle_sampling":
-        roundedCoordinates = [round(robot.x), round(robot.y)]
-        roundedPotential = int(pot.value([robot.x, robot.y]) // 10)
-        if roundedPotential in sampleStorage:
-            if roundedCoordinates not in sampleStorage[roundedPotential]:
-                sampleStorage[roundedPotential].append(roundedCoordinates)
-        else:
-            sampleStorage[roundedPotential] = [roundedCoordinates]
-        # print(f"Sampled at position {roundedCoordinates} with potential {roundedPotential}")
-
+        storingSamples()
 
 
     # WP navigation: switching condition to next WP of the list
@@ -128,29 +148,47 @@ for t in simu.t:
             elif currentState=="circle_sampling":
                 currentState="gotosource"
                 WPManager.WPList.append(getSourceDirection())
-
                 print("Sampling terminé, direction la source !")
         
+
         # outlining the source
         if currentState == "outlining_source":
+            storingSamples()
+
             angle = math.pi/8
+            # angle = math.pi/4
+
+            WPrange = 2.0
 
             if pot.value([robot.x, robot.y]) < previousPot < pollutionThreshold:
-                nextX = robot.x + math.cos(robot.theta + angle)
-                nextY = robot.y + math.sin(robot.theta + angle)
+                nextX = robot.x + WPrange*math.cos(robot.theta - angle)
+                nextY = robot.y + WPrange*math.sin(robot.theta - angle)
 
             elif pot.value([robot.x, robot.y]) > previousPot > pollutionThreshold:
-                nextX = robot.x + math.cos(robot.theta - angle)
-                nextY = robot.y + math.sin(robot.theta - angle)
+                nextX = robot.x + WPrange*math.cos(robot.theta + angle)
+                nextY = robot.y + WPrange*math.sin(robot.theta + angle)
             else:
-                nextX = robot.x + math.cos(robot.theta)
-                nextY = robot.y + math.sin(robot.theta)
+                nextX = robot.x + WPrange*math.cos(robot.theta)
+                nextY = robot.y + WPrange*math.sin(robot.theta)
 
-            WPManager.WPList.append([nextX, nextY])
+            # checking if the robot has already been at these coordinates (meaning the contour is over)
+            roundedPotential = int(pot.value([robot.x, robot.y]) // 10)
+            roundedNextCoordinates = [round(nextX), round(nextY)]
+            if roundedPotential in sampleStorage and roundedNextCoordinates in sampleStorage[roundedPotential]:
+                currentState = "returning_home"
+                WPManager.WPList = []
+                WPManager.WPList.append([x0, y0])
+                print("Contour terminé, retour à la base")
+
+                
+            else:
+                WPManager.WPList.append([nextX, nextY])
 
 
         previousPot = pot.value([robot.x, robot.y])
-        WPManager.switchToNextWP()
+
+        if not WPManager.isWPListEmpty():
+            WPManager.switchToNextWP()
 
 
     # position control loop
@@ -160,11 +198,10 @@ for t in simu.t:
         distance = WPManager.distanceToCurrentWP(robot.x, robot.y)
         
         # Calculate desired linear velocity (proportional control)
-        Kv = 1  # gain for linear velocity control
-        Vr = Kv * distance
+        #Kv = 1  # gain for linear velocity control
+        Vr = kpPos * distance
         
         # Limit maximum velocity if needed
-        Vmax = 4.0  # maximum velocity in m/s
         if Vr > Vmax:
             Vr = Vmax
 
@@ -177,11 +214,10 @@ for t in simu.t:
     # orientation control loop
     if timerOrientationCtrl.isEllapsed(t):
         # angular velocity control input
-        Kw = 4 # gain for angular velocity control
         orientation_error = thetar - robot.theta
-        omegar = Kw * orientation_error
+        omegar = kpOrient * orientation_error
     
-    
+
     # assign control inputs to robot
     robot.setV(Vr)
     robot.setOmega(omegar)    
@@ -205,14 +241,14 @@ plt.close("all")
 fig,ax = simu.plotXY(1)
 pot.plot(noFigure=None, fig=fig, ax=ax)  # plot potential for verification of solution
 
-simu.plotXYTheta(2)
+#simu.plotXYTheta(2)
 #simu.plotVOmega(3)
 
-simu.plotPotential(4)
+#simu.plotPotential(4)
 
 
 
-simu.plotPotential3D(5)
+#simu.plotPotential3D(5)
 
 
 # show plots
@@ -225,9 +261,7 @@ simu.plotPotential3D(5)
 # # Animation *********************************
 fig = plt.figure(1)
 #ax = fig.add_subplot(111, aspect='equal', autoscale_on=False, xlim=(-25, 25), ylim=(-25, 25))
-ax.grid()
-ax.set_xlabel('x (m)')
-ax.set_ylabel('y (m)')
+
 
 robotBody, = ax.plot([], [], 'o-', lw=2)
 robotDirection, = ax.plot([], [], '-', lw=2, color='k')
@@ -237,6 +271,8 @@ time_text = ax.text(0.05, 0.9, '', transform=ax.transAxes)
 potential_template = 'potential = %.1f'
 potential_text = ax.text(0.05, 0.1, '', transform=ax.transAxes)
 WPArea, = ax.plot([], [], ':', lw=1, color='b')
+sourceX, sourceY = computeSourceCenter()
+sourcePoint, = ax.plot(sourceX, sourceY, marker='*', markersize=14, markeredgecolor='k')
 
 thetaWPArea = np.arange(0.0,2.0*math.pi+2*math.pi/30.0, 2.0*math.pi/30.0)
 xWPArea = WPManager.epsilonWP*np.cos(thetaWPArea)
@@ -251,7 +287,8 @@ def initAnimation():
     robotBody.set_markersize(10)    
     time_text.set_text('')
     potential_text.set_text('')
-    return robotBody,robotDirection, wayPoint, time_text, potential_text, WPArea  
+    sourcePoint.set_data([], [])
+    return robotBody,robotDirection, wayPoint, time_text, potential_text, WPArea, sourcePoint
 
 def animate(i):  
     robotBody.set_data([simu.x[i]], [simu.y[i]])          
@@ -262,7 +299,8 @@ def animate(i):
     robotDirection.set_data(thisx, thisy)
     time_text.set_text(time_template%(i*simu.dt))
     potential_text.set_text(potential_template%(pot.value([simu.x[i],simu.y[i]])))
-    return robotBody,robotDirection, wayPoint, time_text, potential_text, WPArea
+    sourcePoint.set_data([sourceX], [sourceY])
+    return robotBody,robotDirection, wayPoint, time_text, potential_text, WPArea, sourcePoint
 
 ani = animation.FuncAnimation(fig, animate, np.arange(1, len(simu.t), 5),
     interval=25, blit=True, init_func=initAnimation, repeat=False)
@@ -273,4 +311,4 @@ ani = animation.FuncAnimation(fig, animate, np.arange(1, len(simu.t), 5),
 plt.show()
 
 # Save GIF
-# ani.save('SourceFinder.gif', writer='pillow', fps=20, dpi=80)
+#ani.save('SourceFinder.gif', writer='pillow', fps=20, dpi=80)
