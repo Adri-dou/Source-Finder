@@ -21,7 +21,7 @@ robot = rob.Robot(x0, y0, theta0)
 
 
 # potential
-pot = Potential.Potential(difficulty=1, random=True)
+pot = Potential.Potential(difficulty=3, random=True)
 
 
 # position control loop: gain and timer
@@ -67,19 +67,29 @@ def storingSamples():
         sampleStorage[roundedPotential] = [roundedCoordinates]
     # print(f"Echantillonnage en {roundedCoordinates} avec un potentiel de {roundedPotential}")
 
-def computeSourceCenter():
-    sumX = 0.0
-    sumY = 0.0
-    count = 0
-    for positions in sampleStorage.values():
-        for pos in positions:
-            sumX += pos[0]
-            sumY += pos[1]
-            count += 1
-    if count > 0:
-        return (sumX / count, sumY / count)
-    else:
-        return (0.0, 0.0)
+def computeSourcesCenters():
+    clustersCenters = []
+    for potential, positions in sampleStorage.items():
+        if potential > 29:
+            for pos in positions:
+
+                if clustersCenters == []:
+                    clustersCenters.append([pos[0], pos[1], 1])
+                else:
+                    isNewCluster = True
+                    for cluster in clustersCenters:
+                        distance = math.sqrt((pos[0]-cluster[0])**2 + (pos[1]-cluster[1])**2)
+                        if distance < 15:
+                            cluster[0] = (cluster[0] * cluster[2] + pos[0]) / (cluster[2] + 1)
+                            cluster[1] = (cluster[1] * cluster[2] + pos[1]) / (cluster[2] + 1)
+                            cluster[2] += 1
+                            isNewCluster = False
+                            break
+                    
+                    if isNewCluster:
+                        clustersCenters.append([pos[0], pos[1], 1])
+
+    return clustersCenters
 
 
 # storage for sampled potentials
@@ -183,8 +193,8 @@ time_text = ax.text(0.05, 0.9, '', transform=ax.transAxes)
 potential_template = 'potential = %.1f'
 potential_text = ax.text(0.05, 0.1, '', transform=ax.transAxes)
 WPArea, = ax.plot([], [], ':', lw=1, color='b')
-sourceX, sourceY = computeSourceCenter()
-sourcePoint, = ax.plot(sourceX, sourceY, marker='*', markersize=14, markeredgecolor='k')
+sources = computeSourcesCenters()
+sourcePoints = [ax.plot(source[0], source[1], marker='*', markersize=14, markeredgecolor='k') for source in sources]
 
 thetaWPArea = np.arange(0.0,2.0*math.pi+2*math.pi/30.0, 2.0*math.pi/30.0)
 xWPArea = WPManager.epsilonWP*np.cos(thetaWPArea)
@@ -199,8 +209,7 @@ def initAnimation():
     robotBody.set_markersize(10)    
     time_text.set_text('')
     potential_text.set_text('')
-    sourcePoint.set_data([], [])
-    return robotBody,robotDirection, wayPoint, time_text, potential_text, WPArea, sourcePoint
+    return robotBody,robotDirection, wayPoint, time_text, potential_text, WPArea
 
 def animate(i):  
     robotBody.set_data([simu.x[i]], [simu.y[i]])          
@@ -211,8 +220,7 @@ def animate(i):
     robotDirection.set_data(thisx, thisy)
     time_text.set_text(time_template%(i*simu.dt))
     potential_text.set_text(potential_template%(pot.value([simu.x[i],simu.y[i]])))
-    sourcePoint.set_data([sourceX], [sourceY])
-    return robotBody,robotDirection, wayPoint, time_text, potential_text, WPArea, sourcePoint
+    return robotBody,robotDirection, wayPoint, time_text, potential_text, WPArea
 
 ani = animation.FuncAnimation(fig, animate, np.arange(1, len(simu.t), 5),
     interval=25, blit=True, init_func=initAnimation, repeat=False)
