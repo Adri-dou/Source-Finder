@@ -38,7 +38,7 @@ timerOrientationCtrl = tmr.Timer(orientationCtrlPeriod)
 
 # list of way points list of [x coord, y coord]
 WPlist = [ [x0,y0]]
-for i in range(17):
+for i in range(15):
     WPlist.append([(-1)**i * 25, -20 + i*3])
     WPlist.append([(-1)**i * 25, -17 + i*3])
 WPlist.append([x0,y0])
@@ -70,7 +70,7 @@ def storingSamples():
 def computeSourcesCenters():
     clustersCenters = []
     for potential, positions in sampleStorage.items():
-        if potential > 29:
+        if potential >= 30:
             for pos in positions:
 
                 if clustersCenters == []:
